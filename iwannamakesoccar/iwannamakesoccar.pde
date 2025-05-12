@@ -16,6 +16,77 @@ import net.java.games.input.*;
 import org.gamecontrolplus.*;
 import org.gamecontrolplus.gui.*;
 
+/* frame = car 1 body 
+   fram2 = car 2 body */
+
+byte screen = 0;
+int Btn = 0;
+//arena size variables
+int AWidth;
+int AHeight;
+int goalHeight;
+//player status vars
+int scor1 = 0;
+int scor2 = 0;
+int boos1 = 100;
+int boos2 = 100;
+byte jmp1 = 0;
+byte jmp2 = 0;
+float[] endgame;
+//camera variables
+float ballVelo = 0;
+int camX = 0;
+int camY = 0;
+boolean dispBG = true;//add a button to toggle this
+//game control
+boolean loading = true;
+boolean halfFPS = true;
+boolean paused = false;
+boolean afterParty = false;
+boolean overtime = false;
+boolean drawing = false;
+//replay variables
+boolean replaying = false;
+int replayFrame = 0;
+int lastGoal = 0;
+int goalSpeed = 0;
+//fixed variables
+final int tireSpeed = 300;
+final int tireSpeed30 = 720;
+final int tireSpeedMax = 500;
+final int jumpPower = 15000;
+final int boostPower = 500;
+final int boostPower30 = 1000;
+final int replayLength = 150;
+final float bgX = 300;
+final float bgY = 200;
+final float tireSoftness = 1;
+final boolean debug = false;
+//physics variables
+FWorld myWorld, play1, play2;
+FBox floor, lwall, rwall, roofe, lgol1, lgol2, rgol1, rgol2, lgoal, rgoal;
+FPoly frame, fram2, frbak;
+FCircle ball, tire1, tire2, tire3, tire4, carp1, carp2, t1bak, t2bak;
+FDistanceJoint[] axles;
+//other class variables
+Gif bg;
+PImage tire, whsav;
+float[][] replay = new float[0][0];
+float[][] replays = new float[0][0];
+PGraphics gcar1, gcar2, pcar1, pcar2, Hitbox;
+PFont Lucid;
+boolean[] Keys = new boolean[22]; //0-5 keys 6&7 debounce for jump key 8-11 wheels touching floor? 12&13 can jump? 14&&15 body touching floor? 16-19 boost keys 20&21 brake keys
+Button[] butns;
+int[] title, gover;
+//controller stuff
+ControlIO CtrlIO;
+ControlDevice N64;
+ControlHat DPad;
+ControlButton A, B, L, R;
+// initialize sounds
+SoundFile ttl, bgm, hit;
+
+
 //classes and stuff
 class Gif extends PImage {
   int frames = 0;
@@ -215,78 +286,14 @@ class Button {
   }
 }
 
-byte screen = 0;
-int Btn = 0;
-//arena size variables
-int AWidth;
-int AHeight;
-int goalHeight;
-//player status vars
-int scor1 = 0;
-int scor2 = 0;
-int boos1 = 100;
-int boos2 = 100;
-byte jmp1 = 0;
-byte jmp2 = 0;
-float[] endgame;
-//camera variables
-float ballVelo = 0;
-int camX = 0;
-int camY = 0;
-boolean dispBG = true;//add a button to toggle this
-//game control
-boolean loading = true;
-boolean halfFPS = true;
-boolean paused = false;
-boolean afterParty = false;
-boolean overtime = false;
-boolean drawing = false;
-//replay variables
-boolean replaying = false;
-int replayFrame = 0;
-int lastGoal = 0;
-int goalSpeed = 0;
-//fixed variables
-final int tireSpeed = 300;
-final int tireSpeed30 = 720;
-final int tireSpeedMax = 500;
-final int jumpPower = 15000;
-final int boostPower = 500;
-final int boostPower30 = 1000;
-final int replayLength = 150;
-final float bgX = 300;
-final float bgY = 200;
-final float tireSoftness = 1;
-final boolean debug = false;
-//physics variables
-FWorld myWorld, play1, play2;
-FBox floor, lwall, rwall, roofe, lgol1, lgol2, rgol1, rgol2, lgoal, rgoal;
-FPoly frame, fram2, frbak;
-FCircle ball, tire1, tire2, tire3, tire4, carp1, carp2, t1bak, t2bak;
-FDistanceJoint[] axles;
-//other class variables
-Gif bg;
-SoundFile ttl, bgm;
-PImage tire, whsav;
-float[][] replay = new float[0][0];
-float[][] replays = new float[0][0];
-PGraphics gcar1, gcar2, pcar1, pcar2, Hitbox;
-PFont Lucid;
-boolean[] Keys = new boolean[22]; //0-5 keys 6&7 debounce for jump key 8-11 wheels touching floor? 12&13 can jump? 14&&15 body touching floor? 16-19 boost keys 20&21 brake keys
-Button[] butns;
-int[] title, gover;
-//controller stuff
-ControlIO CtrlIO;
-ControlDevice N64;
-ControlHat DPad;
-ControlButton A, B, L, R;
 
-void settings() {
+
+void settings() { // runs on the first frame and never again
   Fisica.init(this);
-  size(640,480);
+  size(640,480); // window size
 }
 
-void setup() {
+void setup() { // runs when frameCount = 0
   //loading screen 'w'
   push();
   background(255);
@@ -298,6 +305,9 @@ void setup() {
   text("Loading...",width/2,height/2);
   pop();
   Lucid = createFont("Lucida Console",14,false);
+
+  hit = new SoundFile(this, "hit.wav");
+
 }
 
 //controller plugs
@@ -343,9 +353,10 @@ void draw() {
     new Button(1, 3, width/8, height/4*3, width/4*3, height/8, color(0), color(50,184,83), color(0), color(30,150,60), color(0), color(10,100,23), color(0), color(0), color(0),"Dynamic Background ON",32),
     new Button(1, 4, width/2-25, 0, 50, 20, color(134), color(134), color(134), color(134), color(0), color(150), color(134), color(200), color(0),"Play with\nUnlimited FPS",8),
     new Button(1, 5, width/4, height/4*3, width/2, height/8, color(0), color(50,83,184), color(0), color(30,60,150), color(0), color(10,23,100), color(0), color(0), color(0),"Back to title",32),
-    new Button(1, 6, width/2+25, 0, 50, 20, color(134), color(134), color(134), color(134), color(0), color(150), color(134), color(200), color(0),"Demo Mode",8)
+    new Button(1, 6, width/2+25, 0, 50, 20, color(134), color(134), color(134), color(134), color(0), color(150), color(134), color(200), color(0),"Demo Mode",8),
+    new Button(1, 7, width/8, height/4*3, width/4*3, height/8, color(0), color(50,83,184), color(0), color(30,60,150), color(0), color(10,23,100), color(0), color(0), color(0),"Open Settings",24)
     };
-    title = new int[]{0,1,2,3,5};
+    title = new int[]{0,1,2,3,5,6};
     gover = new int[]{4};
     //initialize physics instances
     myWorld = new FWorld(-AWidth/2+width-500,-AHeight+height-100,AWidth/2+width+500,height+100);
@@ -1071,89 +1082,89 @@ void blueDead(String CALLEDFR, String STOPCODE, String INFOSCND) { //funny
 
 void keyPressed() {
   switch(keyCode){
-  case 65:
-    Keys[0] = true;
-    break;
-  case 68:
-    Keys[1] = true;
-    break;
-  case 87:
-    Keys[2] = true;
-    break;
-  case 127:
-    Keys[3] = true;
-    break;
-  case 34:
-    Keys[4] = true;
-    break;
-  case 36:
-    Keys[5] = true;
-    break;
-  case 81:
-    Keys[16] = true;
-    break;
-  case 69:
-    Keys[17] = true;
-    break;
-  case 155://insert on windows
-    Keys[18] = true;
-    break;
-  case 156://insert on mac
-    Keys[18] = true;
-    break;
-  case 33:
-    Keys[19] = true;
-    break;
-  case 83:
-    Keys[20] = true;
-    break;
-  case 35:
-    Keys[21] = true;
-    break;
+    case 65: // A : Move Left (1)
+      Keys[0] = true;
+      break;
+    case 68: // D : Move Right (1)
+      Keys[1] = true;
+      break;
+    case 87: // W : Jump (1)
+      Keys[2] = true;
+      break;
+    case 127:
+      Keys[3] = true; // del : Move Left (2)
+      break;
+    case 34:
+      Keys[4] = true; // pg dn : Move Right (2)
+      break;
+    case 36: // home : Jump (2)
+      Keys[5] = true;
+      break;
+    case 81: // Q : Boost Left (1)
+      Keys[16] = true;
+      break;
+    case 69: // E : Boost Right (1)
+      Keys[17] = true;
+      break;
+    case 155: // ins (windows) : Boost Left (2)
+      Keys[18] = true;
+      break;
+    case 156: // ins (windows) : Boost Left (2)
+      Keys[18] = true;
+      break;
+    case 33: // pg up : Boost Right (2)
+      Keys[19] = true;
+      break;
+    case 83: // S : Brake (2)
+      Keys[20] = true;
+      break;
+    case 35: // end : Brake (2)
+      Keys[21] = true;
+      break;
   }
 }
 
 void keyReleased() {
   switch(keyCode){
-  case 65:
-    Keys[0] = false;
-    break;
-  case 68:
-    Keys[1] = false;
-    break;
-  case 87:
-    Keys[2] = false;
-    break;
-  case 127:
-    Keys[3] = false;
-    break;
-  case 34:
-    Keys[4] = false;
-    break;
-  case 36:
-    Keys[5] = false;
-    break;
-  case 81:
-    Keys[16] = false;
-    break;
-  case 69:
-    Keys[17] = false;
-    break;
-  case 155:
-    Keys[18] = false;
-    break;
-  case 156:
-    Keys[18] = false;
-    break;
-  case 33:
-    Keys[19] = false;
-    break;
-  case 83:
-    Keys[20] = false;
-    break;
-  case 35:
-    Keys[21] = false;
-    break;
+    case 65: // A : Move Left (1)
+      Keys[0] = false;
+      break;
+    case 68: // D : Move Right (1)
+      Keys[1] = false;
+      break;
+    case 87: // W : Jump (1)
+      Keys[2] = false;
+      break;
+    case 127:
+      Keys[3] = false; // del : Move Left (2)
+      break;
+    case 34:
+      Keys[4] = false; // pg dn : Move Right (2)
+      break;
+    case 36: // home : Jump (2)
+      Keys[5] = false;
+      break;
+    case 81: // Q : Boost Left (1)
+      Keys[16] = false;
+      break;
+    case 69: // E : Boost Right (1)
+      Keys[17] = false;
+      break;
+    case 155: // ins (windows) : Boost Left (2)
+      Keys[18] = false;
+      break;
+    case 156: // ins (windows) : Boost Left (2)
+      Keys[18] = false;
+      break;
+    case 33: // pg up : Boost Right (2)
+      Keys[19] = false;
+      break;
+    case 83: // S : Brake (2)
+      Keys[20] = false;
+      break;
+    case 35: // end : Brake (2)
+      Keys[21] = false;
+      break;
   }
 }
 
@@ -1287,6 +1298,13 @@ void contactStarted(FContact contact) { //add boost if car is on ground and not 
       else {screen=2;frameCount=0;}
     }
   }
+
+  if (contact.contains(ball, frame)) {
+    playHit();
+  }
+  if (contact.contains(ball, fram2)) {
+    playHit();
+  }
 }
 
 void contactPersisted(FContact contact) {
@@ -1313,4 +1331,9 @@ void contactEnded(FContact contact) {
   //if(contact.contains(tire4,ball))jmp2=1;
   if(contact.contains(frame,floor))Keys[14]=false;
   if(contact.contains(fram2,floor))Keys[15]=false;
+}
+
+void playHit() {
+  hit.rate(random(.9, 1.1));
+  hit.play();
 }
